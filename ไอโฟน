@@ -1,0 +1,287 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
+local VU = game:GetService("VirtualUser")
+local player = Players.LocalPlayer
+local cam = workspace.CurrentCamera
+local NAME = "iPhone Pro"
+
+-- ล้างเมนูเก่าถ้ารันซ้ำ
+local pg = player:WaitForChild("PlayerGui")
+if pg:FindFirstChild(NAME) then pg[NAME]:Destroy() end
+
+local function getChar() return player.Character end
+local function getHum()
+    local c = getChar()
+    return c and c:FindFirstChildOfClass("Humanoid")
+end
+local function getHRP()
+    local c = getChar()
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+-- กัน AFK (เปิดตลอด)
+player.Idled:Connect(function()
+    VU:CaptureController()
+    VU:ClickButton2(Vector2.new())
+end)
+
+------------------------------------------------
+-- ฟีเจอร์ (แต่ละอันรับ on = true/false)
+------------------------------------------------
+local conns = {}
+local flags = {}
+
+local function stop(name)
+    if conns[name] then conns[name]:Disconnect() conns[name] = nil end
+end
+
+local features = {}
+
+features["Speed"] = function(on)
+    stop("speed")
+    if on then
+        conns.speed = RunService.Heartbeat:Connect(function()
+            local h = getHum()
+            if h then h.WalkSpeed = 50 end
+        end)
+    else
+        local h = getHum()
+        if h then h.WalkSpeed = 16 end
+    end
+end
+
+features["Infinite Jump"] = function(on)
+    stop("ijump")
+    if on then
+        conns.ijump = UIS.JumpRequest:Connect(function()
+            local h = getHum()
+            if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
+        end)
+    end
+end
+
+features["Noclip"] = function(on)
+    stop("noclip")
+    if on then
+        conns.noclip = RunService.Stepped:Connect(function()
+            local c = getChar()
+            if c then
+                for _, p in ipairs(c:GetDescendants()) do
+                    if p:IsA("BasePart") then p.CanCollide = false end
+                end
+            end
+        end)
+    end
+end
+
+features["Fly"] = function(on)
+    stop("fly")
+    local hrp = getHRP()
+    if hrp and hrp:FindFirstChild("FlyBV") then hrp.FlyBV:Destroy() end
+    if on and hrp then
+        local bv = Instance.new("BodyVelocity")
+        bv.Name = "FlyBV"
+        bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+        bv.Velocity = Vector3.zero
+        bv.Parent = hrp
+        conns.fly = RunService.RenderStepped:Connect(function()
+            local h = getHum()
+            local r = getHRP()
+            if not (h and r and bv.Parent) then return end
+            if h.MoveDirection.Magnitude > 0 then
+                bv.Velocity = cam.CFrame.LookVector * 60
+            else
+                bv.Velocity = Vector3.zero
+            end
+        end)
+    end
+end
+
+features["ESP"] = function(on)
+    flags.esp = on
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player and p.Character then
+            local old = p.Character:FindFirstChild("ESP_HL")
+            if old then old:Destroy() end
+            if on then
+                local h = Instance.new("Highlight")
+                h.Name = "ESP_HL"
+                h.FillColor = Color3.fromRGB(255, 0, 0)
+                h.Parent = p.Character
+            end
+        end
+    end
+end
+local function espApply(p)
+    p.CharacterAdded:Connect(function(c)
+        task.wait(0.5)
+        if flags.esp and p ~= player then
+            local h = Instance.new("Highlight")
+            h.Name = "ESP_HL"
+            h.FillColor = Color3.fromRGB(255, 0, 0)
+            h.Parent = c
+        end
+    end)
+end
+for _, p in ipairs(Players:GetPlayers()) do espApply(p) end
+Players.PlayerAdded:Connect(espApply)
+
+features["Fullbright"] = function(on)
+    Lighting.Brightness = on and 2 or 1
+    Lighting.ClockTime = on and 14 or Lighting.ClockTime
+    Lighting.FogEnd = on and 1e6 or Lighting.FogEnd
+    Lighting.GlobalShadows = not on
+    Lighting.Ambient = on and Color3.new(1, 1, 1) or Color3.fromRGB(70, 70, 70)
+end
+
+features["Tap Teleport"] = function(on)
+    stop("tp")
+    if on then
+        local mouse = player:GetMouse()
+        conns.tp = mouse.Button1Down:Connect(function()
+            local r = getHRP()
+            if r and mouse.Hit then
+                r.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0))
+            end
+        end)
+    end
+end
+
+features["Lock Target"] = function(on)
+    stop("lock")
+    if on then
+        conns.lock = RunService.RenderStepped:Connect(function()
+            local hrp = getHRP()
+            if not hrp then return end
+            local best, dist = nil, math.huge
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= player and p.Character then
+                    local t = p.Character:FindFirstChild("HumanoidRootPart")
+                    local h = p.Character:FindFirstChildOfClass("Humanoid")
+                    if t and h and h.Health > 0 then
+                        local d = (t.Position - hrp.Position).Magnitude
+                        if d < dist then best, dist = t, d end
+                    end
+                end
+            end
+            if best then
+                cam.CFrame = CFrame.new(cam.CFrame.Position, best.Position)
+            end
+        end)
+    end
+end
+
+------------------------------------------------
+-- เมนู iPhone Pro
+------------------------------------------------
+local gui = Instance.new("ScreenGui")
+gui.Name = NAME
+gui.ResetOnSpawn = false
+gui.Parent = pg
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 230, 0, 300)
+frame.Position = UDim2.new(0, 20, 0.2, 0)
+frame.BackgroundColor3 = Color3.fromRGB(242, 242, 247)
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 20)
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -50, 0, 40)
+title.Position = UDim2.new(0, 10, 0, 0)
+title.BackgroundTransparency = 1
+title.Text = NAME
+title.Font = Enum.Font.GothamBold
+title.TextSize = 20
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.TextColor3 = Color3.new(0, 0, 0)
+title.Parent = frame
+
+local list = Instance.new("ScrollingFrame")
+list.Size = UDim2.new(1, -20, 1, -50)
+list.Position = UDim2.new(0, 10, 0, 45)
+list.BackgroundTransparency = 1
+list.ScrollBarThickness = 3
+list.CanvasSize = UDim2.new(0, 0, 0, 0)
+list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+list.Parent = frame
+
+local layout = Instance.new("UIListLayout", list)
+layout.Padding = UDim.new(0, 6)
+
+local mini = Instance.new("TextButton")
+mini.Size = UDim2.new(0, 30, 0, 30)
+mini.Position = UDim2.new(1, -38, 0, 5)
+mini.Text = "–"
+mini.Font = Enum.Font.GothamBold
+mini.TextSize = 20
+mini.BackgroundColor3 = Color3.fromRGB(220, 220, 225)
+mini.TextColor3 = Color3.new(0, 0, 0)
+mini.Parent = frame
+Instance.new("UICorner", mini).CornerRadius = UDim.new(1, 0)
+
+local minimized = false
+mini.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    list.Visible = not minimized
+    frame.Size = minimized and UDim2.new(0, 230, 0, 45) or UDim2.new(0, 230, 0, 300)
+    mini.Text = minimized and "+" or "–"
+end)
+
+local order = { "Speed", "Infinite Jump", "Fly", "Noclip", "ESP", "Fullbright", "Tap Teleport", "Lock Target" }
+
+for i, name in ipairs(order) do
+    local on = false
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -6, 0, 40)
+    row.BackgroundColor3 = Color3.new(1, 1, 1)
+    row.LayoutOrder = i
+    row.Parent = list
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 12)
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(0.6, 0, 1, 0)
+    lbl.Position = UDim2.new(0, 12, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = name
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 15
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.TextColor3 = Color3.new(0, 0, 0)
+    lbl.Parent = row
+
+    local sw = Instance.new("TextButton")
+    sw.Size = UDim2.new(0, 46, 0, 26)
+    sw.Position = UDim2.new(1, -56, 0.5, -13)
+    sw.Text = ""
+    sw.BackgroundColor3 = Color3.fromRGB(200, 200, 205)
+    sw.Parent = row
+    Instance.new("UICorner", sw).CornerRadius = UDim.new(1, 0)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0, 22, 0, 22)
+    knob.Position = UDim2.new(0, 2, 0, 2)
+    knob.BackgroundColor3 = Color3.new(1, 1, 1)
+    knob.Parent = sw
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+    sw.MouseButton1Click:Connect(function()
+        on = not on
+        sw.BackgroundColor3 = on and Color3.fromRGB(52, 199, 89) or Color3.fromRGB(200, 200, 205)
+        knob:TweenPosition(UDim2.new(0, on and 22 or 2, 0, 2), "Out", "Quad", 0.15, true)
+        local ok, err = pcall(features[name], on)
+        if not ok then warn("[" .. NAME .. "] " .. name .. ": " .. tostring(err)) end
+    end)
+end
+
+pcall(function()
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = NAME,
+        Text = "โหลดเสร็จแล้ว",
+        Duration = 5
+    })
+end)
